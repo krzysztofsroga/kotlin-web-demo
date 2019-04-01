@@ -39,3 +39,7 @@ grant codeBase "file:@LIBS_DIR@/kotlin.web.demo.executors.jar"
   permission java.lang.RuntimePermission "accessDeclaredMembers";
 };
 
+grant codeBase "file:@WRAPPERS_LIB@/fuel-2.0.1.jar" {
+	permission java.lang.RuntimePermission "setFactory";
+}
+
