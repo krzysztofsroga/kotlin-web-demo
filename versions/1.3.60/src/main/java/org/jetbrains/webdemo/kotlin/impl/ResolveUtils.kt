@@ -15,6 +15,7 @@
  */
 
 @file:Suppress("PRE_RELEASE_CLASS")
+
 package org.jetbrains.webdemo.kotlin.impl
 
 import com.intellij.openapi.project.Project
@@ -25,9 +26,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.codegen.ClassBuilderFactories
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
-import org.jetbrains.kotlin.config.TargetPlatformVersion
 import org.jetbrains.kotlin.container.*
 import org.jetbrains.kotlin.context.ContextForNewModule
 import org.jetbrains.kotlin.context.ModuleContext
@@ -39,8 +38,10 @@ import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.js.analyze.TopDownAnalyzerFacadeForJS
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.js.config.JsConfig
-import org.jetbrains.kotlin.js.resolve.JsPlatform
+import org.jetbrains.kotlin.js.resolve.JsPlatformAnalyzerServices
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.platform.TargetPlatformVersion
+import org.jetbrains.kotlin.platform.js.JsPlatforms
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
@@ -78,7 +79,6 @@ object ResolveUtils {
         val environment = EnvironmentManager.getEnvironment()
         val trace = CliBindingTrace()
         val configuration = environment.configuration
-        configuration.put(JVMConfigurationKeys.ADD_BUILT_INS_FROM_COMPILER_TO_DEPENDENCIES, true)
 
         val container = TopDownAnalyzerFacadeForJVM.createContainer(
                 environment.project,
@@ -86,8 +86,7 @@ object ResolveUtils {
                 trace,
                 configuration,
                 { globalSearchScope -> environment.createPackagePartProvider(globalSearchScope) },
-                { storageManager, ktFiles -> FileBasedDeclarationProviderFactory(storageManager, ktFiles) },
-                TopDownAnalyzerFacadeForJVM.newModuleSearchScope(project, files)
+                { storageManager, ktFiles -> FileBasedDeclarationProviderFactory(storageManager, ktFiles) }
         )
 
         container.getService(LazyTopDownAnalyzer::class.java).analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files, DataFlowInfo.EMPTY)
@@ -112,9 +111,9 @@ object ResolveUtils {
         val config = JsConfig(project, configuration)
 
         val module = ContextForNewModule(
-                ProjectContext(project),
+                ProjectContext(project, "WED-DEMO-JS"),
                 Name.special("<" + config.moduleId + ">"),
-                JsPlatform.builtIns, null
+                JsPlatformAnalyzerServices.builtIns, null
         )
         module.setDependencies(computeDependencies(module.module, config))
 
@@ -133,7 +132,7 @@ object ResolveUtils {
         val allDependencies = ArrayList<ModuleDescriptorImpl>()
         allDependencies.add(module)
         config.moduleDescriptors.mapTo(allDependencies) { it }
-        allDependencies.add(JsPlatform.builtIns.builtInsModule)
+        allDependencies.add(JsPlatformAnalyzerServices.builtIns.builtInsModule)
         return allDependencies
     }
 
@@ -145,9 +144,9 @@ object ResolveUtils {
     ): Pair<LazyTopDownAnalyzer, ComponentProvider> {
         val container = composeContainer(
                 "TopDownAnalyzerForJs",
-                JsPlatform.platformConfigurator.platformSpecificContainer
+                JsPlatformAnalyzerServices.platformConfigurator.platformSpecificContainer
         ) {
-            configureModule(moduleContext, JsPlatform, platformVersion, bindingTrace)
+            configureModule(moduleContext, JsPlatforms.defaultJsPlatform, JsPlatformAnalyzerServices, bindingTrace, LanguageVersionSettingsImpl.DEFAULT)
             useInstance(declarationProviderFactory)
             registerSingleton(AnnotationResolverImpl::class.java)
             registerSingleton(FileScopeProviderImpl::class.java)
@@ -155,7 +154,6 @@ object ResolveUtils {
             CompilerEnvironment.configure(this)
 
             useInstance(LookupTracker.DO_NOTHING)
-            useInstance(LanguageVersionSettingsImpl.DEFAULT)
             registerSingleton(ResolveSession::class.java)
             registerSingleton(LazyTopDownAnalyzer::class.java)
         }
